@@ -5,3 +5,8 @@ ipykernel
 networkx
 matplotlib
 scipy
+seaborn
+scikit-learn
+xgboost
+torch
+plotly
