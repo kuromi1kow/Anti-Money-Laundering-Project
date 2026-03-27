@@ -1,9 +1,5 @@
-"""
-test_evaluate.py
-----------------
-Tests for src/evaluate.py — uses synthetic model objects and score arrays.
-No real datasets or heavy model training needed.
-"""
+# test_evaluate.py
+# tests for src/evaluate.py - uses synthetic scores/models, no real data
 
 import matplotlib
 matplotlib.use("Agg")  # non-interactive backend for CI
@@ -23,9 +19,9 @@ from src.evaluate import (
 from src.models import train_isolation_forest, train_logistic
 
 
-# ---------------------------------------------------------------------------
+# ---
 # Helpers
-# ---------------------------------------------------------------------------
+# ---
 
 @pytest.fixture
 def fitted_logistic(X_y):
@@ -53,9 +49,9 @@ def score_arrays(X_y):
     }, y
 
 
-# ---------------------------------------------------------------------------
+# ---
 # evaluate_supervised
-# ---------------------------------------------------------------------------
+# ---
 
 METRIC_KEYS = {"name", "precision", "recall", "f1", "roc_auc", "pr_auc"}
 
@@ -79,9 +75,9 @@ def test_evaluate_supervised_name_preserved(fitted_logistic):
     assert result["name"] == "MyModel"
 
 
-# ---------------------------------------------------------------------------
+# ---
 # evaluate_unsupervised
-# ---------------------------------------------------------------------------
+# ---
 
 def test_evaluate_unsupervised_keys(fitted_iforest):
     model, _, X, y = fitted_iforest
@@ -96,9 +92,9 @@ def test_evaluate_unsupervised_metric_range(fitted_iforest):
         assert 0.0 <= result[key] <= 1.0, f"{key}={result[key]} out of [0, 1]"
 
 
-# ---------------------------------------------------------------------------
+# ---
 # summary_table
-# ---------------------------------------------------------------------------
+# ---
 
 def test_summary_table_shape(X_y):
     X, y = X_y
@@ -129,9 +125,9 @@ def test_summary_table_sorted_by_pr_auc(X_y):
     assert pr_aucs == sorted(pr_aucs, reverse=True), "summary_table should be sorted descending by PR-AUC"
 
 
-# ---------------------------------------------------------------------------
+# ---
 # plot_pr_roc_curves
-# ---------------------------------------------------------------------------
+# ---
 
 def test_plot_pr_roc_curves_returns_figure(score_arrays):
     scores, y = score_arrays
@@ -156,9 +152,9 @@ def test_plot_pr_roc_curves_single_model(X_y):
     plt.close(fig)
 
 
-# ---------------------------------------------------------------------------
+# ---
 # plot_pca_projection
-# ---------------------------------------------------------------------------
+# ---
 
 def test_plot_pca_projection_returns_figure(X_y):
     X, y = X_y

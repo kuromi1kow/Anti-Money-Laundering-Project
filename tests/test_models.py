@@ -1,17 +1,14 @@
-"""
-test_models.py
---------------
-Tests for src/models.py — use tiny synthetic arrays so CI stays fast.
-"""
+# test_models.py
+# tests for src/models.py - uses small synthetic arrays so these run fast
 
 import time
 
 import numpy as np
 import pytest
-import torch
 
 from src.models import (
     Autoencoder,
+    _TORCH_AVAILABLE,
     _normalize,
     compute_ensemble_scores,
     train_autoencoder,
@@ -21,10 +18,12 @@ from src.models import (
     train_random_forest,
 )
 
+_needs_torch = pytest.mark.skipif(not _TORCH_AVAILABLE, reason="torch not installed")
 
-# ---------------------------------------------------------------------------
+
+# ---
 # _normalize
-# ---------------------------------------------------------------------------
+# ---
 
 def test_normalize_range(X_y):
     X, _ = X_y
@@ -45,9 +44,9 @@ def test_normalize_preserves_shape(X_y):
     assert _normalize(s).shape == s.shape
 
 
-# ---------------------------------------------------------------------------
+# ---
 # Supervised models
-# ---------------------------------------------------------------------------
+# ---
 
 def test_train_logistic_predict_proba(X_y):
     X, y = X_y
@@ -79,9 +78,9 @@ def test_train_random_forest_predict_proba(X_y):
     assert proba.shape == (len(X), 2)
 
 
-# ---------------------------------------------------------------------------
+# ---
 # Unsupervised — Isolation Forest
-# ---------------------------------------------------------------------------
+# ---
 
 def test_train_isolation_forest_returns_tuple(X_y):
     X, _ = X_y
@@ -96,9 +95,9 @@ def test_train_isolation_forest_scores_range(X_y):
     assert scores.min() >= 0.0 and scores.max() <= 1.0
 
 
-# ---------------------------------------------------------------------------
+# ---
 # Unsupervised — K-Means
-# ---------------------------------------------------------------------------
+# ---
 
 def test_train_kmeans_returns_tuple(X_y):
     X, _ = X_y
@@ -113,30 +112,36 @@ def test_train_kmeans_scores_range(X_y):
     assert scores.min() >= 0.0 and scores.max() <= 1.0
 
 
-# ---------------------------------------------------------------------------
-# Autoencoder
-# ---------------------------------------------------------------------------
+# ---
+# Autoencoder (skipped when torch not installed)
+# ---
 
+@_needs_torch
 def test_autoencoder_forward_shape():
+    import torch
     model = Autoencoder(in_dim=8, hidden=16, bottleneck=4)
     x = torch.randn(10, 8)
     out = model(x)
     assert out.shape == x.shape, "Autoencoder output should match input shape"
 
 
+@_needs_torch
 def test_autoencoder_bottleneck_reduces_dims():
+    import torch
     model = Autoencoder(in_dim=8, hidden=16, bottleneck=4)
     x = torch.randn(10, 8)
     encoded = model.encoder(x)
     assert encoded.shape == (10, 4), "Encoder output shape should be (batch, bottleneck)"
 
 
+@_needs_torch
 def test_train_autoencoder_returns_tuple(X_y):
     X, _ = X_y
     result = train_autoencoder(X, device="cpu", epochs=2)
     assert isinstance(result, tuple) and len(result) == 2
 
 
+@_needs_torch
 def test_train_autoencoder_scores_range(X_y):
     X, _ = X_y
     _, scores = train_autoencoder(X, device="cpu", epochs=2)
@@ -144,6 +149,7 @@ def test_train_autoencoder_scores_range(X_y):
     assert scores.min() >= 0.0 and scores.max() <= 1.0
 
 
+@_needs_torch
 def test_train_autoencoder_fast(X_y):
     X, _ = X_y
     t0 = time.time()
@@ -152,9 +158,9 @@ def test_train_autoencoder_fast(X_y):
     assert elapsed < 10, f"Autoencoder training took too long: {elapsed:.1f}s"
 
 
-# ---------------------------------------------------------------------------
+# ---
 # Ensemble
-# ---------------------------------------------------------------------------
+# ---
 
 def test_compute_ensemble_range(X_y):
     X, _ = X_y

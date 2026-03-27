@@ -1,8 +1,5 @@
-"""
-test_preprocessing.py
----------------------
-Tests for src/preprocessing.py — all run on synthetic data (no real datasets needed).
-"""
+# test_preprocessing.py
+# tests for src/preprocessing.py - all synthetic data, no real datasets needed
 
 import numpy as np
 import pandas as pd
@@ -20,9 +17,9 @@ from src.preprocessing import (
 )
 
 
-# ---------------------------------------------------------------------------
+# ---
 # engineer_features
-# ---------------------------------------------------------------------------
+# ---
 
 def test_engineer_features_cols(ibm_df):
     out = engineer_features(ibm_df)
@@ -66,9 +63,9 @@ def test_engineer_pattern_flag_without_patterns(ibm_df):
     assert (out["pattern_involved"] == 0).all(), "pattern_involved should be 0 when no patterns given"
 
 
-# ---------------------------------------------------------------------------
+# ---
 # clean_ibm
-# ---------------------------------------------------------------------------
+# ---
 
 def test_clean_ibm_creates_ids(ibm_df):
     out = clean_ibm(ibm_df)
@@ -99,9 +96,9 @@ def test_clean_ibm_numeric_amounts(ibm_df):
     assert pd.api.types.is_float_dtype(out["Amount Paid"]), "Amount Paid should be float after cleaning"
 
 
-# ---------------------------------------------------------------------------
+# ---
 # clean_czech
-# ---------------------------------------------------------------------------
+# ---
 
 def test_clean_czech_date_parsed(czech_tables):
     out = clean_czech(czech_tables)
@@ -121,9 +118,9 @@ def test_clean_czech_k_symbol_no_nulls(czech_tables):
     assert out["trans"]["k_symbol"].isnull().sum() == 0, "k_symbol should have no nulls after cleaning"
 
 
-# ---------------------------------------------------------------------------
+# ---
 # harmonize
-# ---------------------------------------------------------------------------
+# ---
 
 REQUIRED_COLS = {"amount", "amount_received", "timestamp", "sender_id",
                  "receiver_id", "_label", "payment_type",
@@ -161,9 +158,9 @@ def test_harmonize_ibm_only(ibm_df):
     assert len(merged) == len(ibm_c)
 
 
-# ---------------------------------------------------------------------------
+# ---
 # build_feature_matrix
-# ---------------------------------------------------------------------------
+# ---
 
 def test_build_feature_matrix_shape(ibm_df):
     X, y, cols = build_feature_matrix(ibm_df)
@@ -178,9 +175,9 @@ def test_build_feature_matrix_scaled(ibm_df):
     assert (col_means < 1.0).all(), "Features should be approximately zero-mean after scaling"
 
 
-# ---------------------------------------------------------------------------
+# ---
 # build_transaction_graph
-# ---------------------------------------------------------------------------
+# ---
 
 def test_build_transaction_graph_type(ibm_df):
     import networkx as nx

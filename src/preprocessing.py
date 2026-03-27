@@ -1,10 +1,5 @@
-"""
-preprocessing.py
-----------------
-Data loading, cleaning, and feature engineering for the AML project.
-
-All functions are pure (no global state / side effects).
-"""
+# preprocessing.py
+# handles loading + cleaning for IBM AML and Czech bank datasets, plus feature engineering
 
 from __future__ import annotations
 
@@ -19,11 +14,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-# Ordered list of features used by all downstream models
+# features we use across all models - keep this in sync with engineer_features()
 FEATURE_COLS = [
     "amount_paid",
     "amount_received",
@@ -34,26 +25,21 @@ FEATURE_COLS = [
     "hour",
     "day_of_week",
     "month",
-    # account-level aggregates
+    # per-account aggregates
     "acct_tx_count",
     "acct_mean_amount",
     "acct_std_amount",
     "acct_unique_counterparties",
-    # pattern feature
+    # from pattern matching
     "pattern_involved",
 ]
 
 TARGET_COL = "Is Laundering"
 
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
-
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _ibm_data_dir(data_dir: str | Path | None = None) -> Path:
-    """Return the IBM-AML data directory, preferring the symlink in data/raw/."""
     if data_dir is not None:
         return Path(data_dir)
     symlink = _PROJECT_ROOT / "data" / "raw" / "ibm-aml"
@@ -78,22 +64,8 @@ def _czech_data_dir(data_dir: str | Path | None = None) -> Path:
     )
 
 
-# ---------------------------------------------------------------------------
-# Data loading
-# ---------------------------------------------------------------------------
-
 def load_ibm(data_dir: str | Path | None = None) -> pd.DataFrame:
-    """Load the IBM AML HI-Small transactions CSV.
-
-    Parameters
-    ----------
-    data_dir : path to the IBM dataset directory (optional).
-               Defaults to data/raw/ibm-aml symlink.
-
-    Returns
-    -------
-    pd.DataFrame with raw transactions.
-    """
+    """Load the IBM HI-Small transaction CSV and parse timestamps."""
     path = _ibm_data_dir(data_dir) / "HI-Small_Trans.csv"
     df = pd.read_csv(path)
     df["Timestamp"] = pd.to_datetime(df["Timestamp"])
@@ -101,13 +73,7 @@ def load_ibm(data_dir: str | Path | None = None) -> pd.DataFrame:
 
 
 def load_czech(data_dir: str | Path | None = None) -> Dict[str, pd.DataFrame]:
-    """Load all Czech Financial dataset tables.
-
-    Returns
-    -------
-    dict mapping table name → DataFrame
-    (keys: trans, account, client, disp, district, loan, order, card)
-    """
+    """Load all Czech bank tables (trans, loan, account, etc.) into a dict."""
     base = _czech_data_dir(data_dir)
     tables: Dict[str, pd.DataFrame] = {}
     for fname in ["trans.csv", "account.csv", "client.csv", "disp.csv",
@@ -120,12 +86,10 @@ def load_czech(data_dir: str | Path | None = None) -> Dict[str, pd.DataFrame]:
 
 
 def parse_ibm_patterns(data_dir: str | Path | None = None) -> pd.DataFrame:
-    """Parse HI-Small_Patterns.txt into a tidy DataFrame.
+    """Parse the patterns file into a DataFrame.
 
-    Returns
-    -------
-    pd.DataFrame with columns: pattern_type, timestamp, from_bank,
-    from_account, to_bank, to_account, amount, currency
+    The file uses BEGIN/END blocks with a non-standard format, so we
+    parse it line by line instead of using read_csv.
     """
     path = _ibm_data_dir(data_dir) / "HI-Small_Patterns.txt"
     records = []
@@ -156,52 +120,34 @@ def parse_ibm_patterns(data_dir: str | Path | None = None) -> pd.DataFrame:
     return df
 
 
-# ---------------------------------------------------------------------------
-# Feature engineering
-# ---------------------------------------------------------------------------
-
 def engineer_features(
     df: pd.DataFrame,
     patterns_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """Add engineered features to the IBM transactions DataFrame.
+    """Add engineered features to the IBM transactions dataframe.
 
-    Steps
-    -----
-    1. Temporal features from Timestamp
-    2. Currency match flag
-    3. Label-encode Payment Format and currencies
-    4. Account-level aggregate features (count, mean, std amount, unique counterparties)
-    5. pattern_involved flag (if patterns_df is provided)
-
-    Parameters
-    ----------
-    df : raw IBM transactions (output of load_ibm)
-    patterns_df : output of parse_ibm_patterns (optional)
-
-    Returns
-    -------
-    pd.DataFrame with FEATURE_COLS + TARGET_COL columns present.
+    Adds temporal features, currency match flag, label-encoded categoricals,
+    account-level aggregates, and a flag for accounts seen in laundering patterns.
     """
     out = df.copy()
 
-    # 1. Temporal
+    # temporal features from timestamp
     out["hour"] = out["Timestamp"].dt.hour
     out["day_of_week"] = out["Timestamp"].dt.dayofweek
     out["month"] = out["Timestamp"].dt.month
 
-    # 2. Currency match
+    # flag transactions where payment and receiving currencies match
     out["same_currency"] = (
         out["Payment Currency"] == out["Receiving Currency"]
     ).astype(int)
 
-    # 3. Rename amount cols for convenience
+    # rename for cleaner column names downstream
     out = out.rename(columns={
         "Amount Paid": "amount_paid",
         "Amount Received": "amount_received",
     })
 
-    # 4. Label-encode categoricals
+    # encode categorical columns
     for col, new_col in [
         ("Payment Format", "payment_format_enc"),
         ("Payment Currency", "pay_currency_enc"),
@@ -210,7 +156,7 @@ def engineer_features(
         le = LabelEncoder()
         out[new_col] = le.fit_transform(out[col].astype(str))
 
-    # 5. Account-level aggregates (sender account)
+    # account-level aggregate stats (grouped by sender account)
     acct_stats = (
         out.groupby("Account")["amount_paid"]
         .agg(acct_tx_count="count", acct_mean_amount="mean", acct_std_amount="std")
@@ -228,7 +174,7 @@ def engineer_features(
     out = out.merge(acct_stats, on="Account", how="left")
     out = out.merge(counterparties, on="Account", how="left")
 
-    # 6. Pattern-involved flag
+    # mark accounts that appear in known laundering patterns
     if patterns_df is not None and not patterns_df.empty:
         laundering_accounts = (
             set(patterns_df["from_account"]) | set(patterns_df["to_account"])
@@ -243,17 +189,8 @@ def engineer_features(
     return out
 
 
-# ---------------------------------------------------------------------------
-# Cleaning helpers
-# ---------------------------------------------------------------------------
-
 def clean_ibm(df: pd.DataFrame) -> pd.DataFrame:
-    """Clean raw IBM AML transactions.
-
-    - Coerces amount columns to numeric
-    - Creates sender_id / receiver_id composite keys
-    - Drops exact duplicates
-    """
+    """Basic cleaning for the IBM dataset - coerce amounts, build composite IDs, drop dupes."""
     out = df.copy()
     out["Amount Paid"] = pd.to_numeric(out["Amount Paid"], errors="coerce")
     out["Amount Received"] = pd.to_numeric(out["Amount Received"], errors="coerce")
@@ -264,11 +201,10 @@ def clean_ibm(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def clean_czech(tables: Dict[str, pd.DataFrame]) -> Dict[str, pd.DataFrame]:
-    """Clean Czech Financial dataset tables.
+    """Clean the Czech bank tables.
 
-    - trans: parses YYMMDD date int → datetime, coerces amount, fills k_symbol nulls
-    - loan: adds binary risk column (B/D → 1, A/C → 0)
-    - Drops duplicates on all tables
+    The date column stores dates as YYMMDD integers (e.g. 980115 = Jan 15 1998),
+    so we parse manually. Loan status B/D = default (risk=1), A/C = ok (risk=0).
     """
     out = {k: v.copy() for k, v in tables.items()}
 
@@ -301,17 +237,12 @@ def harmonize(
     ibm_df: pd.DataFrame,
     czech_tables: Dict[str, pd.DataFrame],
 ) -> pd.DataFrame:
-    """Merge IBM and Czech datasets into a unified transaction DataFrame.
+    """Combine IBM and Czech data into one unified transactions dataframe.
 
-    Columns in output
-    -----------------
-    amount, amount_received, timestamp, sender_id, receiver_id,
-    _label, payment_type, currency_send, currency_recv, source
-
-    IBM _label  : Is Laundering (0/1)
-    Czech _label: loan risk (0/1 from loan table); -1 if no loan info
+    IBM labels: Is Laundering (0/1).
+    Czech labels: loan default risk (0/1). Rows without loan info get -1.
     """
-    # ── IBM slice ────────────────────────────────────────────────────────────
+    # IBM slice with unified column names
     ibm = pd.DataFrame({
         "amount":          pd.to_numeric(ibm_df.get("Amount Paid",  ibm_df.get("amount_paid")),  errors="coerce"),
         "amount_received": pd.to_numeric(ibm_df.get("Amount Received", ibm_df.get("amount_received")), errors="coerce"),
@@ -325,11 +256,10 @@ def harmonize(
         "source":          "ibm",
     })
 
-    # ── Czech slice ───────────────────────────────────────────────────────────
+    # Czech slice - join loan risk back onto transactions by account_id
     czech_rows = []
     if "trans" in czech_tables:
         cz_t = czech_tables["trans"].copy()
-        # Attach loan risk via account_id
         if "loan" in czech_tables:
             loan_risk = (
                 czech_tables["loan"][["account_id", "risk"]]
@@ -359,27 +289,12 @@ def harmonize(
     return merged
 
 
-# ---------------------------------------------------------------------------
-# Train / test split
-# ---------------------------------------------------------------------------
-
 def get_train_test(
     df: pd.DataFrame,
     test_size: float = 0.2,
     random_state: int = 42,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Stratified train/test split with StandardScaler applied to features.
-
-    Parameters
-    ----------
-    df : output of engineer_features
-    test_size : fraction of data for test set
-    random_state : random seed
-
-    Returns
-    -------
-    X_train, X_test, y_train, y_test (numpy arrays)
-    """
+    """Stratified split + StandardScaler. Returns X_train, X_test, y_train, y_test."""
     available = [c for c in FEATURE_COLS if c in df.columns]
     X = df[available].values
     y = df[TARGET_COL].values
@@ -395,30 +310,11 @@ def get_train_test(
     return X_train, X_test, y_train, y_test
 
 
-# ---------------------------------------------------------------------------
-# Feature matrix for unsupervised / evaluation use
-# ---------------------------------------------------------------------------
-
 def build_feature_matrix(
     ibm_raw: pd.DataFrame,
     patterns_df: pd.DataFrame | None = None,
 ) -> Tuple[np.ndarray, pd.Series, List[str]]:
-    """Engineer features, scale, and return a ready-to-use feature matrix.
-
-    Convenience wrapper around engineer_features + StandardScaler so callers
-    don't need to repeat the 3-step pattern inline.
-
-    Parameters
-    ----------
-    ibm_raw : raw IBM transactions (output of load_ibm or clean_ibm)
-    patterns_df : output of parse_ibm_patterns (optional)
-
-    Returns
-    -------
-    X_scaled : np.ndarray, shape (n_samples, n_features)
-    y        : pd.Series of Is Laundering labels
-    cols     : list of feature column names (same order as X_scaled columns)
-    """
+    """Shortcut: engineer features + scale in one call. Returns (X, y, col_names)."""
     feat = engineer_features(ibm_raw, patterns_df)
     cols = [c for c in FEATURE_COLS if c in feat.columns]
     X = feat[cols].values
@@ -427,24 +323,13 @@ def build_feature_matrix(
     return X_scaled, y, cols
 
 
-# ---------------------------------------------------------------------------
-# Transaction graph
-# ---------------------------------------------------------------------------
-
 def build_transaction_graph(
     df: pd.DataFrame,
     max_edges: int = 50_000,
 ) -> nx.DiGraph:
-    """Build a directed transaction graph from a cleaned IBM DataFrame.
+    """Build a directed graph from sender_id -> receiver_id edges.
 
-    Parameters
-    ----------
-    df : output of clean_ibm (must have sender_id and receiver_id columns)
-    max_edges : cap on number of edges to keep graph tractable
-
-    Returns
-    -------
-    nx.DiGraph with sender_id → receiver_id edges
+    max_edges caps the size so we don't run out of memory on the full dataset.
     """
     G = nx.DiGraph()
     sample = df[["sender_id", "receiver_id"]].dropna().head(max_edges)

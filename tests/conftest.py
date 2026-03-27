@@ -1,9 +1,5 @@
-"""
-conftest.py
------------
-Shared pytest fixtures — synthetic DataFrames and arrays that stand in
-for the real (gitignored) datasets. All tests run without any downloaded data.
-"""
+# conftest.py
+# shared fixtures with synthetic data so tests don't need the real datasets
 
 import numpy as np
 import pandas as pd
@@ -12,7 +8,7 @@ import pytest
 
 @pytest.fixture
 def ibm_df():
-    """200-row synthetic IBM-like transactions DataFrame."""
+    """200-row synthetic transactions that match the IBM dataset schema."""
     n = 200
     rng = np.random.default_rng(42)
     accounts = [f"ACC{i:04d}" for i in range(50)]
@@ -33,7 +29,7 @@ def ibm_df():
 
 @pytest.fixture
 def czech_tables():
-    """Minimal Czech trans + loan tables mimicking the real schema."""
+    """Small Czech trans + loan tables with the same columns as the real data."""
     n = 100
     rng = np.random.default_rng(0)
     trans = pd.DataFrame({
@@ -54,7 +50,7 @@ def czech_tables():
 
 @pytest.fixture
 def X_y():
-    """300-sample feature matrix with imbalanced binary labels (5% fraud)."""
+    """300-sample feature matrix, ~5% fraud rate to match real class imbalance."""
     rng = np.random.default_rng(7)
     X = rng.standard_normal((300, 8)).astype(np.float32)
     y = np.zeros(300, dtype=int)

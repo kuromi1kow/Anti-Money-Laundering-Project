@@ -1,6 +1,5 @@
 name: aml_proj_ci
 channels:
-  - pytorch
   - conda-forge
 dependencies:
   - python=3.10
@@ -9,7 +8,5 @@ dependencies:
   - scikit-learn
   - networkx
   - matplotlib
-  - pytorch::pytorch
-  - pytorch::cpuonly    # prevents CUDA wheels from being downloaded in CI
   - pytest
   - pytest-timeout

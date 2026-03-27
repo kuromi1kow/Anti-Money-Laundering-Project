@@ -1,8 +1,5 @@
-"""
-evaluate.py
------------
-Metric computation and plotting helpers for AML model evaluation.
-"""
+# evaluate.py
+# metric computation and plotting helpers for comparing AML models
 
 from __future__ import annotations
 
@@ -26,26 +23,22 @@ from sklearn.metrics import (
 )
 
 
-# ---------------------------------------------------------------------------
-# Metric helpers
-# ---------------------------------------------------------------------------
-
 def _get_scores(model, X_test: np.ndarray) -> np.ndarray:
-    """Return a continuous anomaly/probability score for any model type."""
+    """Get continuous anomaly/probability scores from any model type."""
     if hasattr(model, "predict_proba"):
         return model.predict_proba(X_test)[:, 1]
     if hasattr(model, "decision_function"):
         scores = model.decision_function(X_test)
-        # Isolation Forest / LOF: higher score = more normal → flip sign
+        # IForest/LOF: higher score = more normal, so flip the sign
         return -scores
     raise ValueError(f"Model {type(model)} has no predict_proba or decision_function.")
 
 
 def _threshold_predictions(model, X_test: np.ndarray, threshold: float = 0.5) -> np.ndarray:
-    """Binary predictions via threshold on continuous scores (for unsupervised)."""
+    """Convert model output to binary predictions."""
     if hasattr(model, "predict_proba"):
         return (model.predict_proba(X_test)[:, 1] >= threshold).astype(int)
-    # Unsupervised: -1 → 1 (anomaly), 1 → 0 (inlier)
+    # unsupervised: predict() returns -1 for anomaly, 1 for inlier
     raw = model.predict(X_test)
     return (raw == -1).astype(int)
 
@@ -56,12 +49,7 @@ def evaluate_supervised(
     y_test: np.ndarray,
     name: str,
 ) -> Dict:
-    """Evaluate a supervised classifier.
-
-    Returns
-    -------
-    dict with keys: name, precision, recall, f1, roc_auc, pr_auc
-    """
+    """Compute precision/recall/F1/ROC-AUC/PR-AUC for a supervised model."""
     scores = _get_scores(model, X_test)
     preds = (scores >= 0.5).astype(int)
     return {
@@ -80,13 +68,9 @@ def evaluate_unsupervised(
     y_test: np.ndarray,
     name: str,
 ) -> Dict:
-    """Evaluate an unsupervised anomaly detector.
+    """Same metrics as evaluate_supervised but works with anomaly detectors.
 
-    Anomaly score is inverted (higher = more anomalous) so PR-AUC is meaningful.
-
-    Returns
-    -------
-    dict with keys: name, precision, recall, f1, roc_auc, pr_auc
+    Anomaly score is inverted so higher = more suspicious (needed for PR-AUC to be meaningful).
     """
     scores = _get_scores(model, X_test)
     preds = _threshold_predictions(model, X_test)
@@ -101,28 +85,19 @@ def evaluate_unsupervised(
 
 
 def summary_table(results: List[Dict]) -> pd.DataFrame:
-    """Build a formatted summary DataFrame from a list of evaluation dicts."""
+    """Turn a list of evaluate_* dicts into a sorted comparison table."""
     df = pd.DataFrame(results).set_index("name")
     df = df[["precision", "recall", "f1", "roc_auc", "pr_auc"]]
     df.columns = ["Precision", "Recall", "F1", "ROC-AUC", "PR-AUC"]
     return df.round(4).sort_values("PR-AUC", ascending=False)
 
 
-# ---------------------------------------------------------------------------
-# Plotting helpers
-# ---------------------------------------------------------------------------
-
 def plot_pr_curves(
     models_dict: Dict,
     X_test: np.ndarray,
     y_test: np.ndarray,
 ) -> plt.Figure:
-    """Precision-Recall curves for multiple models on a single axes.
-
-    Parameters
-    ----------
-    models_dict : {name: fitted_model}
-    """
+    """Plot PR curves for a dict of {name: fitted_model}."""
     fig, ax = plt.subplots(figsize=(8, 6))
     for name, model in models_dict.items():
         scores = _get_scores(model, X_test)
@@ -142,7 +117,7 @@ def plot_roc_curves(
     X_test: np.ndarray,
     y_test: np.ndarray,
 ) -> plt.Figure:
-    """ROC curves for multiple models on a single axes."""
+    """Plot ROC curves for a dict of {name: fitted_model}."""
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.plot([0, 1], [0, 1], "k--", label="Random")
     for name, model in models_dict.items():
@@ -163,7 +138,7 @@ def plot_confusion_matrices(
     X_test: np.ndarray,
     y_test: np.ndarray,
 ) -> plt.Figure:
-    """Grid of confusion matrices (one per model)."""
+    """Grid of confusion matrices, one per model."""
     n = len(models_dict)
     cols = min(n, 3)
     rows = (n + cols - 1) // cols
@@ -185,10 +160,6 @@ def plot_confusion_matrices(
     return fig
 
 
-# ---------------------------------------------------------------------------
-# Score-array-based plots (for unsupervised models)
-# ---------------------------------------------------------------------------
-
 _PALETTE = ["#e74c3c", "#f39c12", "#3498db", "#9b59b6", "#2ecc71"]
 
 
@@ -196,12 +167,10 @@ def plot_pr_roc_curves(
     scores_dict: Dict[str, np.ndarray],
     y_true: np.ndarray,
 ) -> plt.Figure:
-    """Side-by-side Precision-Recall and ROC curves from raw score arrays.
+    """Side-by-side PR and ROC curves from raw score arrays.
 
-    Parameters
-    ----------
-    scores_dict : {model_name: anomaly_score_array}  (higher = more anomalous)
-    y_true      : ground-truth binary labels
+    scores_dict maps model name -> anomaly score array (higher = more anomalous).
+    Useful for unsupervised models where we already have the scores.
     """
     fig, axes = plt.subplots(1, 2, figsize=(18, 7))
 
@@ -236,14 +205,7 @@ def plot_pca_projection(
     ensemble_scores: np.ndarray,
     random_state: int = 42,
 ) -> plt.Figure:
-    """2-panel PCA scatter: true labels on the left, ensemble score heatmap on the right.
-
-    Parameters
-    ----------
-    X_scaled        : scaled feature matrix (n_samples, n_features)
-    y_true          : binary ground-truth labels
-    ensemble_scores : continuous anomaly scores (higher = more anomalous)
-    """
+    """2-panel PCA scatter: true labels (left) vs ensemble score heatmap (right)."""
     pca = PCA(n_components=2, random_state=random_state)
     X_pca = pca.fit_transform(X_scaled)
 
