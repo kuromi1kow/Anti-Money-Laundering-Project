@@ -243,6 +243,122 @@ def engineer_features(
 
 
 # ---------------------------------------------------------------------------
+# Cleaning helpers
+# ---------------------------------------------------------------------------
+
+def clean_ibm(df: pd.DataFrame) -> pd.DataFrame:
+    """Clean raw IBM AML transactions.
+
+    - Coerces amount columns to numeric
+    - Creates sender_id / receiver_id composite keys
+    - Drops exact duplicates
+    """
+    out = df.copy()
+    out["Amount Paid"] = pd.to_numeric(out["Amount Paid"], errors="coerce")
+    out["Amount Received"] = pd.to_numeric(out["Amount Received"], errors="coerce")
+    out["sender_id"] = out["From Bank"].astype(str) + "_" + out["Account"].astype(str)
+    out["receiver_id"] = out["To Bank"].astype(str) + "_" + out["Account.1"].astype(str)
+    out = out.drop_duplicates()
+    return out
+
+
+def clean_czech(tables: Dict[str, pd.DataFrame]) -> Dict[str, pd.DataFrame]:
+    """Clean Czech Financial dataset tables.
+
+    - trans: parses YYMMDD date int → datetime, coerces amount, fills k_symbol nulls
+    - loan: adds binary risk column (B/D → 1, A/C → 0)
+    - Drops duplicates on all tables
+    """
+    out = {k: v.copy() for k, v in tables.items()}
+
+    if "trans" in out:
+        t = out["trans"]
+        def _parse_czech_date(d):
+            try:
+                s = str(int(d)).zfill(6)
+                return pd.Timestamp(f"19{s[:2]}-{s[2:4]}-{s[4:6]}")
+            except Exception:
+                return pd.NaT
+        t["date"] = t["date"].apply(_parse_czech_date)
+        t["amount"] = pd.to_numeric(t["amount"], errors="coerce")
+        if "k_symbol" in t.columns:
+            t["k_symbol"] = t["k_symbol"].fillna("unknown").replace("", "unknown")
+        out["trans"] = t.drop_duplicates()
+
+    if "loan" in out:
+        risk_map = {"A": 0, "B": 1, "C": 0, "D": 1}
+        out["loan"]["risk"] = out["loan"]["status"].map(risk_map)
+        out["loan"] = out["loan"].drop_duplicates()
+
+    for key in [k for k in out if k not in ("trans", "loan")]:
+        out[key] = out[key].drop_duplicates()
+
+    return out
+
+
+def harmonize(
+    ibm_df: pd.DataFrame,
+    czech_tables: Dict[str, pd.DataFrame],
+) -> pd.DataFrame:
+    """Merge IBM and Czech datasets into a unified transaction DataFrame.
+
+    Columns in output
+    -----------------
+    amount, amount_received, timestamp, sender_id, receiver_id,
+    _label, payment_type, currency_send, currency_recv, source
+
+    IBM _label  : Is Laundering (0/1)
+    Czech _label: loan risk (0/1 from loan table); -1 if no loan info
+    """
+    # ── IBM slice ────────────────────────────────────────────────────────────
+    ibm = pd.DataFrame({
+        "amount":          pd.to_numeric(ibm_df.get("Amount Paid",  ibm_df.get("amount_paid")),  errors="coerce"),
+        "amount_received": pd.to_numeric(ibm_df.get("Amount Received", ibm_df.get("amount_received")), errors="coerce"),
+        "timestamp":       pd.to_datetime(ibm_df["Timestamp"], errors="coerce") if "Timestamp" in ibm_df.columns else ibm_df.get("timestamp"),
+        "sender_id":       ibm_df.get("sender_id", ibm_df.get("Account", "").astype(str)),
+        "receiver_id":     ibm_df.get("receiver_id", ibm_df.get("Account.1", "").astype(str)),
+        "_label":          ibm_df["Is Laundering"].astype(int) if "Is Laundering" in ibm_df.columns else -1,
+        "payment_type":    ibm_df.get("Payment Format", "unknown"),
+        "currency_send":   ibm_df.get("Payment Currency", "USD"),
+        "currency_recv":   ibm_df.get("Receiving Currency", "USD"),
+        "source":          "ibm",
+    })
+
+    # ── Czech slice ───────────────────────────────────────────────────────────
+    czech_rows = []
+    if "trans" in czech_tables:
+        cz_t = czech_tables["trans"].copy()
+        # Attach loan risk via account_id
+        if "loan" in czech_tables:
+            loan_risk = (
+                czech_tables["loan"][["account_id", "risk"]]
+                .dropna(subset=["risk"])
+                .drop_duplicates("account_id")
+            )
+            cz_t = cz_t.merge(loan_risk, on="account_id", how="left")
+        else:
+            cz_t["risk"] = -1
+        cz_t["risk"] = cz_t["risk"].fillna(-1).astype(int)
+
+        czech_rows = pd.DataFrame({
+            "amount":          pd.to_numeric(cz_t["amount"], errors="coerce").abs(),
+            "amount_received": pd.to_numeric(cz_t["amount"], errors="coerce").abs(),
+            "timestamp":       cz_t["date"],
+            "sender_id":       cz_t["account_id"].astype(str),
+            "receiver_id":     cz_t.get("partner", pd.Series(["unknown"] * len(cz_t))).astype(str),
+            "_label":          cz_t["risk"],
+            "payment_type":    cz_t.get("type", "unknown"),
+            "currency_send":   "CZK",
+            "currency_recv":   "CZK",
+            "source":          "czech",
+        })
+
+    frames = [ibm] + ([czech_rows] if len(czech_rows) > 0 else [])
+    merged = pd.concat(frames, ignore_index=True)
+    return merged
+
+
+# ---------------------------------------------------------------------------
 # Train / test split
 # ---------------------------------------------------------------------------
 
