@@ -1,3 +1,4 @@
 data/raw/*
 **/*.zip
 .vscode
+**/__pycache__/*

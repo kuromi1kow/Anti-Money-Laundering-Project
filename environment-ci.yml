@@ -1,0 +1,12 @@
+name: aml_proj_ci
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - numpy
+  - pandas
+  - scikit-learn
+  - networkx
+  - matplotlib
+  - pytest
+  - pytest-timeout

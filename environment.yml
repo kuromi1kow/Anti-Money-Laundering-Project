@@ -1,0 +1,38 @@
+name: aml_proj
+channels:
+  - conda-forge
+  - pytorch
+dependencies:
+  - python=3.10
+
+  # Core scientific stack
+  - numpy
+  - pandas
+  - scipy
+  - scikit-learn
+
+  # Visualization
+  - matplotlib
+  - seaborn
+  - plotly
+
+  # ML / graph
+  - xgboost
+  - networkx
+
+  # Jupyter support
+  - ipykernel
+
+  # Testing
+  - pytest
+  - pytest-timeout
+
+  # PyTorch (Apple Silicon compatible)
+  - pytorch
+  - torchvision
+  - torchaudio
+
+  # Pip section for lightweight extras
+  - pip
+  - pip:
+      - kagglehub

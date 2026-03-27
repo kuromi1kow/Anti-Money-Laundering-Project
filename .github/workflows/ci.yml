@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/**"
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up conda environment (Python 3.10, conda-forge)
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          environment-file: environment-ci.yml
+          activate-environment: aml_proj_ci
+          auto-activate-base: false
+          miniforge-version: latest
+
+      - name: Run tests
+        shell: bash -el {0}
+        run: pytest tests/ -v --tb=short --timeout=60
