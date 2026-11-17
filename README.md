@@ -1,6 +1,5 @@
 # AML Risk Detection with Merged IBM + SAML-D Data
 
-**Presentation video:** [YouTube recording](https://youtu.be/Js18MIyoyoU)
 
 This repository contains our BU CS 506 final project on anti-money laundering (AML) risk detection from transaction data. The final project story is centered on [ds_final.ipynb](ds_final.ipynb), which merges the IBM AML dataset and the SAML-D synthetic AML dataset, engineers leak-aware historical features, benchmarks several AML models, tunes alert thresholds, and exports final-quality figures and artifacts.
 
